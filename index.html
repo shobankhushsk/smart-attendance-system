@@ -1,3 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Attendance Scanner</title>
+<meta name="description" content="Scan attendance sheets and get present student lists instantly">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#7c5cff">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Attendance">
+<style>
+  html, body { margin:0; padding:0; background:#f2f2f5; min-height:100vh; }
+</style>
+</head>
+<body>
 <div id="app-root"></div>
 <style>
   #app-root, #app-root * { box-sizing: border-box; }
@@ -272,28 +291,17 @@
   async function scanSheet(){
     state.loading = true; state.error = null; render();
     try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      const response = await fetch("/api/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "claude-sonnet-4-6",
-          max_tokens: 1000,
-          messages: [{
-            role: "user",
-            content: [
-              { type: "image", source: { type: "base64", media_type: state.imageMediaType, data: state.imageBase64 } },
-              { type: "text", text: `This is a photo of a classroom attendance sheet. Numbers from 1 to ${state.total} are printed in a grid. The teacher has drawn a circle (or oval) around the roll numbers of PRESENT students; numbers with no circle around them are ABSENT. Carefully look at every number and determine which ones have a hand-drawn circle/oval mark around them. Respond with ONLY a raw JSON object, no markdown formatting, no code fences, no other text, in exactly this shape: {"present":[1,2,3]} — list only the circled (present) roll numbers, sorted ascending.` }
-            ]
-          }]
+          image: state.imageBase64,
+          mediaType: state.imageMediaType,
+          total: state.total
         })
       });
-      const data = await response.json();
-      if (data.error) throw new Error(data.error.message || 'API error');
-      const textBlock = (data.content || []).map(b => b.text || '').join('');
-      const cleaned = textBlock.replace(/```json|```/g, '').trim();
-      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error('Could not parse response');
-      const parsed = JSON.parse(jsonMatch[0]);
+      const parsed = await response.json();
+      if (parsed.error) throw new Error(parsed.error);
       const present = Array.isArray(parsed.present) ? parsed.present.filter(n => Number.isInteger(n) && n >= 1 && n <= state.total) : [];
       state.presentSet = new Set(present);
       state.scanned = true;
@@ -308,3 +316,13 @@
   render();
 })();
 </script>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    });
+  }
+</script>
+</body>
+</html>
